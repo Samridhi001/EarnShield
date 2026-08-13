@@ -4,6 +4,8 @@ const cors = require('cors');
 const connectDB = require('./src/config/db');
 const validateEnv = require('./src/utils/validateEnv');
 const authRoutes = require('./src/routes/authRoutes');
+const subscriptionRoutes = require('./src/routes/subscriptionRoutes');
+
 
 validateEnv();
 connectDB();
