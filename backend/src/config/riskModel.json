@@ -1,0 +1,59 @@
+{
+  "featureNames": [
+    "rainfallMm",
+    "temperatureC",
+    "aqi",
+    "activityScore"
+  ],
+  "classes": [
+    "high",
+    "low",
+    "medium"
+  ],
+  "scaler": {
+    "mean": [
+      136.34048742138364,
+      32.59341194968554,
+      131.80445754716982,
+      0.726494103773585
+    ],
+    "scale": [
+      112.42432773254473,
+      7.339456819745846,
+      42.07180668836739,
+      0.18410995004988967
+    ]
+  },
+  "model": {
+    "coefficients": [
+      [
+        2.038029990541732,
+        0.025570597951403866,
+        0.2897471314991682,
+        -0.03525644331490953
+      ],
+      [
+        -0.6719552209032521,
+        -0.12508630203237459,
+        -0.8074308244911955,
+        0.07183661649968506
+      ],
+      [
+        -1.3660747696384836,
+        0.09951570408097084,
+        0.5176836929920273,
+        -0.03658017318477555
+      ]
+    ],
+    "intercepts": [
+      1.8739164119253229,
+      -1.2681838688467877,
+      -0.6057325430785061
+    ]
+  },
+  "metadata": {
+    "algorithm": "multinomial_logistic_regression",
+    "trainedOn": "synthetic_dataset.csv (15600 records)",
+    "note": "Deployed for simplicity/interpretability; see model_comparison.csv for Random Forest benchmark."
+  }
+}
