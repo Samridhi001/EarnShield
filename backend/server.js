@@ -5,7 +5,7 @@ const connectDB = require('./src/config/db');
 const validateEnv = require('./src/utils/validateEnv');
 const authRoutes = require('./src/routes/authRoutes');
 const subscriptionRoutes = require('./src/routes/subscriptionRoutes');
-
+const claimRoutes = require('./src/routes/claimRoutes');
 
 validateEnv();
 connectDB();
@@ -21,6 +21,7 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/claims', claimRoutes);
 
 const PORT = process.env.PORT || 5000;
 
