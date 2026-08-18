@@ -10,23 +10,18 @@ const ClaimEvent = require('../models/ClaimEvent');
  */
 
 const scalePoints = (points) => {
-  const dims = ['lat', 'lng', 'minutesSinceEpoch'];
-  const mins = {}, maxs = {};
+  const LAT_RANGE = 0.15;
+  const LNG_RANGE = 0.15;
+  const TIME_RANGE_MINUTES = 30;
 
-  dims.forEach((dim) => {
-    const values = points.map((p) => p[dim]);
-    mins[dim] = Math.min(...values);
-    maxs[dim] = Math.max(...values);
-  });
-
-  return points.map((p) => {
-    const scaled = {};
-    dims.forEach((dim) => {
-      const range = maxs[dim] - mins[dim];
-      scaled[dim] = range === 0 ? 0 : (p[dim] - mins[dim]) / range;
-    });
-    return { ...p, scaled };
-  });
+  return points.map((p) => ({
+    ...p,
+    scaled: {
+      lat: p.lat / LAT_RANGE,
+      lng: p.lng / LNG_RANGE,
+      minutesSinceEpoch: p.minutesSinceEpoch / TIME_RANGE_MINUTES,
+    },
+  }));
 };
 
 const euclideanDistance = (a, b) => {
@@ -35,9 +30,8 @@ const euclideanDistance = (a, b) => {
   return Math.sqrt(sumSq);
 };
 
-
 const dbscan = (points, eps = 0.15, minPoints = 3) => {
-  const labels = new Array(points.length).fill(null); // null = unvisited
+  const labels = new Array(points.length).fill(null);
   let clusterId = 0;
 
   const regionQuery = (idx) => {
@@ -50,11 +44,11 @@ const dbscan = (points, eps = 0.15, minPoints = 3) => {
   };
 
   for (let i = 0; i < points.length; i++) {
-    if (labels[i] !== null) continue; 
+    if (labels[i] !== null) continue;
 
     const neighbors = regionQuery(i);
     if (neighbors.length < minPoints) {
-      labels[i] = -1; 
+      labels[i] = -1;
       continue;
     }
 
@@ -63,7 +57,7 @@ const dbscan = (points, eps = 0.15, minPoints = 3) => {
 
     for (let j = 0; j < seeds.length; j++) {
       const seedIdx = seeds[j];
-      if (labels[seedIdx] === -1) labels[seedIdx] = clusterId; 
+      if (labels[seedIdx] === -1) labels[seedIdx] = clusterId;
       if (labels[seedIdx] !== null) continue;
 
       labels[seedIdx] = clusterId;
@@ -80,6 +74,7 @@ const dbscan = (points, eps = 0.15, minPoints = 3) => {
 };
 
 const checkFraudRingMembership = async (newClaimLocation, zone) => {
+
   const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
 
   const recentClaims = await ClaimEvent.find({
@@ -87,24 +82,30 @@ const checkFraudRingMembership = async (newClaimLocation, zone) => {
     createdAt: { $gte: sixHoursAgo },
   }).select('claimedLocation createdAt');
 
-  const points = recentClaims.map((claim) => ({
+  const rawPoints = recentClaims.map((claim) => ({
     lat: claim.claimedLocation.lat,
     lng: claim.claimedLocation.lng,
-    minutesSinceEpoch: claim.createdAt.getTime() / 60000,
+    timestamp: claim.createdAt.getTime(),
   }));
-  points.push({
+  rawPoints.push({
     lat: newClaimLocation.lat,
     lng: newClaimLocation.lng,
-    minutesSinceEpoch: Date.now() / 60000,
+    timestamp: Date.now(),
   });
 
-  if (points.length < 4) {
+  if (rawPoints.length < 4) {
     return { isPartOfRing: false, clusterSize: 0 };
   }
 
-  const scaledPoints = scalePoints(points);
-  const labels = dbscan(scaledPoints, 0.15, 3);
+  const earliestTimestamp = Math.min(...rawPoints.map((p) => p.timestamp));
+  const points = rawPoints.map((p) => ({
+    lat: p.lat,
+    lng: p.lng,
+    minutesSinceEpoch: (p.timestamp - earliestTimestamp) / 60000,
+  }));
 
+  const scaledPoints = scalePoints(points);
+  const labels = dbscan(scaledPoints, 0.05, 3);
   const newClaimLabel = labels[labels.length - 1];
   const isPartOfRing = newClaimLabel !== -1;
   const clusterSize = isPartOfRing ? labels.filter((l) => l === newClaimLabel).length : 0;

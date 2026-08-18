@@ -1,13 +1,5 @@
 const ClaimEvent = require('../models/ClaimEvent');
-
-/**
- * Fraud Detection Service — Layer 1: deterministic rule checks.
- *
- * Each check adds points to a suspicion score (0-100). Higher score = more
- * suspicious. This is intentionally simple and explainable — every flag
- * has a plain-English reason, which matters both for fairness (a rejected
- * worker deserves to know why) and for debugging your own system.
- */
+const { checkFraudRingMembership } = require('./fraudClusteringService');
 
 const ZONE_BOUNDS = {
   'Bhubaneswar-Zone1': { minLat: 20.20, maxLat: 20.35, minLng: 85.75, maxLng: 85.90 },
@@ -19,10 +11,9 @@ const ZONE_BOUNDS = {
 
 const isLocationInZone = (lat, lng, zone) => {
   const bounds = ZONE_BOUNDS[zone];
-  if (!bounds) return false; 
+  if (!bounds) return false;
   return lat >= bounds.minLat && lat <= bounds.maxLat && lng >= bounds.minLng && lng <= bounds.maxLng;
 };
-
 
 const distanceKm = (lat1, lng1, lat2, lng2) => {
   const R = 6371;
@@ -34,7 +25,6 @@ const distanceKm = (lat1, lng1, lat2, lng2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-
 const checkLocationConsistency = (claimedLocation, zone) => {
   const { lat, lng } = claimedLocation;
   const inZone = isLocationInZone(lat, lng, zone);
@@ -44,7 +34,6 @@ const checkLocationConsistency = (claimedLocation, zone) => {
     reason: inZone ? null : `Claimed location does not match declared zone (${zone})`,
   };
 };
-
 
 const checkDuplicateClaim = async (userId, triggerType) => {
   const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -66,7 +55,7 @@ const checkImpossibleMovement = async (userId, claimedLocation) => {
   const lastClaim = await ClaimEvent.findOne({ user: userId }).sort({ createdAt: -1 });
 
   if (!lastClaim) {
-    return { passed: true, points: 0, reason: null }; 
+    return { passed: true, points: 0, reason: null };
   }
 
   const hoursSinceLastClaim = (Date.now() - lastClaim.createdAt.getTime()) / (1000 * 60 * 60);
@@ -90,16 +79,27 @@ const checkImpossibleMovement = async (userId, claimedLocation) => {
 };
 
 /**
- * Runs all rule checks and returns a combined fraud assessment.
- * @returns {{ score: number, flags: string[], recommendation: 'approve'|'review'|'reject' }}
+ * NEW — Check 4: is this claim part of a detected coordinated fraud-ring cluster?
  */
+const checkFraudRing = async (claimedLocation, zone) => {
+  const { isPartOfRing, clusterSize } = await checkFraudRingMembership(claimedLocation, zone);
+  return {
+    passed: !isPartOfRing,
+    points: isPartOfRing ? 70 : 0, // heavily weighted — coordinated fraud is the most serious signal
+    reason: isPartOfRing
+      ? `Claim location/time matches a cluster of ${clusterSize} claims — possible coordinated fraud ring`
+      : null,
+  };
+};
+
 const runFraudChecks = async ({ userId, claimedLocation, zone, triggerType }) => {
   const locationCheck = checkLocationConsistency(claimedLocation, zone);
   const duplicateCheck = await checkDuplicateClaim(userId, triggerType);
   const movementCheck = await checkImpossibleMovement(userId, claimedLocation);
+  const ringCheck = await checkFraudRing(claimedLocation, zone);
 
-  const checks = [locationCheck, duplicateCheck, movementCheck];
-  const score = checks.reduce((sum, check) => sum + check.points, 0);
+  const checks = [locationCheck, duplicateCheck, movementCheck, ringCheck];
+  const score = Math.min(100, checks.reduce((sum, check) => sum + check.points, 0)); // cap at 100
   const flags = checks.filter((c) => c.reason).map((c) => c.reason);
 
   let recommendation = 'approve';
