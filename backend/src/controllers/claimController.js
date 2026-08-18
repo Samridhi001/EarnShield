@@ -1,6 +1,7 @@
 const ClaimEvent = require('../models/ClaimEvent');
 const Subscription = require('../models/Subscription');
 const { runFraudChecks } = require('../services/fraudDetectionService');
+const { processPayout } = require('../services/payoutService');
 
 const TRIGGER_PAYOUTS = {
   rainfall: 200,
@@ -10,6 +11,7 @@ const TRIGGER_PAYOUTS = {
   appDowntime: 100,
 };
 
+// @route  POST /api/claims
 const submitClaim = async (req, res) => {
   try {
     const { subscriptionId, triggerType, claimedLocation } = req.body;
@@ -41,13 +43,15 @@ const submitClaim = async (req, res) => {
       : fraudResult.recommendation === 'review' ? 'flagged'
       : 'approved';
 
+    const payoutAmount = TRIGGER_PAYOUTS[triggerType] || 0;
+
     const claim = await ClaimEvent.create({
       user: req.user._id,
       subscription: subscription._id,
       triggerType,
       zone: subscription.zone,
       claimedLocation,
-      payoutAmount: TRIGGER_PAYOUTS[triggerType] || 0,
+      payoutAmount,
       status,
       fraudCheck: {
         score: fraudResult.score,
@@ -56,7 +60,18 @@ const submitClaim = async (req, res) => {
       },
     });
 
-    res.status(201).json({ claim, fraudAssessment: fraudResult });
+    let payoutResult = null;
+
+    if (status === 'approved') {
+      payoutResult = await processPayout(
+        req.user._id,
+        claim._id,
+        payoutAmount,
+        `Payout for ${triggerType} claim`
+      );
+    }
+
+    res.status(201).json({ claim, fraudAssessment: fraudResult, payoutResult });
   } catch (error) {
     res.status(500).json({ message: 'Claim submission failed', error: error.message });
   }
