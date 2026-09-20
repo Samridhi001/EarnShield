@@ -1,4 +1,4 @@
-const REQUIRED_ENV_VARS = ['PORT', 'MONGO_URI', 'JWT_SECRET'];
+const REQUIRED_ENV_VARS = ['PORT', 'MONGO_URI', 'JWT_SECRET', 'OPENWEATHER_API_KEY'];
 
 const validateEnv = () => {
   const missing = REQUIRED_ENV_VARS.filter((key) => !process.env[key]);
