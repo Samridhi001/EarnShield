@@ -7,6 +7,7 @@ const authRoutes = require('./src/routes/authRoutes');
 const subscriptionRoutes = require('./src/routes/subscriptionRoutes');
 const claimRoutes = require('./src/routes/claimRoutes');
 const walletRoutes = require('./src/routes/walletRoutes');
+const adminRoutes = require('./src/routes/adminRoutes');
 
 validateEnv();
 connectDB();
@@ -24,6 +25,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/claims', claimRoutes);
 app.use('/api/wallet', walletRoutes);
+app.use('/api/admin', adminRoutes);
 
 const PORT = process.env.PORT || 5000;
 
